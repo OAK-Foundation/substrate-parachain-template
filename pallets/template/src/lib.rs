@@ -4,7 +4,7 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
 
-use cumulus_pallet_xcm::{Origin as CumulusOrigin};
+use cumulus_pallet_xcm::{ensure_sibling_para, Origin as CumulusOrigin};
 use cumulus_primitives_core::ParaId;
 use frame_system::Config as SystemConfig;
 use sp_std::prelude::*;
@@ -107,6 +107,14 @@ use super::*;
 			Ok(())
 		}
 
+		/**
+		 * This function wraps the currency transfer private function that can move tokens from wallet to wallet. 
+		 * The intention is for this function to be called by the `Transact` XCM instruction when Turing calls back to this chain.
+		 * While we are using transfer, this is just an example and any private function can be used to substitute.
+		 *
+		 * By calling `ensure_sibling_para`, we can ensure that only sibling parachains will be able to call and returns the para ID.
+		 * Using this parachain ID, the user can make sure that the para ID is whitelisted.
+		 */
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn force_send_balance(origin: OriginFor<T>, source: T::AccountId, dest: T::AccountId, value: BalanceOf<T>) -> DispatchResult {
 			ensure_signed(origin)?;
@@ -120,6 +128,12 @@ use super::*;
 			Ok(())
 		}
 
+		/**
+		 * This function implements XCM call to OAK with the OAK XCM crate. It uses the `force_send_balance` extrinsic above.
+		 * We can create an XCMP instruction with that call wrapped in the instructions to be sent back to this chain.
+		 * This implementation withdraws assets for the fee from the sovereign account of this chain on Turing.
+		 * Therefore, TUR tokens must be available for this sovereign account on the Turing chain. 
+		 */
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn send_schedule_xcmp_with_crate(
 			origin: OriginFor<T>,
