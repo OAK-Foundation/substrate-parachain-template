@@ -117,8 +117,8 @@ use super::*;
 		 */
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn force_send_balance(origin: OriginFor<T>, source: T::AccountId, dest: T::AccountId, value: BalanceOf<T>) -> DispatchResult {
-			ensure_signed(origin)?;
-			info!("made it into force send balance, source: {:?}, dest: {:?}, value: {:?}", source, dest, value);
+			let origin_para_id: ParaId = ensure_sibling_para(<T as Config>::Origin::from(origin))?;
+			info!("Force sending balance, source: {:?}, dest: {:?}, value: {:?}, origin_para_id: {:?}", source, dest, value, origin_para_id);
 			<T as Config>::Currency::transfer(
 				&source,
 				&dest,
