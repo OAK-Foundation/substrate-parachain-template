@@ -5050,7 +5050,7 @@ dependencies = [
 [[package]]
 name = "oak-xcm"
 version = "0.1.0"
-source = "git+https://github.com/OAK-Foundation/oak-xcm?branch=jzhou/adjustName#ec1b579b173eb8768442b55aa5b06801bf59289f"
+source = "git+https://github.com/OAK-Foundation/oak-xcm?branch=main#958a03324704aa9fd8d8bcdb4d716bada28b3750"
 dependencies = [
  "cumulus-primitives-core",
  "frame-benchmarking",
