@@ -29,7 +29,6 @@ use super::*;
 	use frame_support::{pallet_prelude::*, traits::{ExistenceRequirement, Currency}};
 	use frame_system::pallet_prelude::*;
 	use log::info;
-	use sp_runtime::traits::Convert;
 
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -46,9 +45,9 @@ use super::*;
 		type XcmSender: SendXcm;
 		type XcmExecutor: ExecuteXcm<<Self as pallet::Config>::Call>;
 
-		type AccountIdToU8Vec: Convert<Self::AccountId, [u8; 32]>;
 		type OakXcmInstructionGenerator: XcmInstructionGenerator<Self>;
 		type Currency: Currency<Self::AccountId>;
+		type SelfParaId: Get<ParaId>;
 	}
 
 	#[pallet::pallet]
@@ -86,7 +85,7 @@ use super::*;
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn delayed_transfer(origin: OriginFor<T>, source: T::AccountId, dest: T::AccountId, value: BalanceOf<T>) -> DispatchResult {
 			let origin_para_id: ParaId = ensure_sibling_para(<T as Config>::Origin::from(origin))?;
-			info!("Force sending balance, source: {:?}, dest: {:?}, value: {:?}, origin_para_id: {:?}", source, dest, value, origin_para_id);
+			info!("Send balance on a delayed transfer, source: {:?}, dest: {:?}, value: {:?}, origin_para_id: {:?}", source, dest, value, origin_para_id);
 			<T as Config>::Currency::transfer(
 				&source,
 				&dest,
@@ -114,7 +113,7 @@ use super::*;
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			let tur_para_id: ParaId = ParaId::from(TURING_PARA_ID);
-			let self_para_id: ParaId = ParaId::from(2001);
+			let self_para_id: ParaId = T::SelfParaId::get();
 			let call_name = b"automation_time_schedule_xcmp_with_crate".to_vec();
 			let inner_call = <T as Config>::Call::from(Call::<T>::delayed_transfer { source: who.clone(), dest, value })
 				.encode()

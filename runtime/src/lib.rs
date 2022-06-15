@@ -472,10 +472,10 @@ impl pallet_template::Config for Runtime {
 	type Call = Call;
 	type XcmSender = XcmRouter;
 	type XcmExecutor = XcmExecutor<XcmConfig>;
-	type AccountIdToU8Vec = AccountIdToU8Vec;
 	type OakXcmInstructionGenerator =
 		oak_xcm::OakXcmInstructionGenerator<AccountIdToU8Vec, FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>>;
 	type Currency = Balances;
+	type SelfParaId = parachain_info::Pallet<Runtime>;
 }
 
 impl pallet_sudo::Config for Runtime {
