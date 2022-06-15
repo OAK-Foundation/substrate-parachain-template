@@ -11,7 +11,7 @@ use sp_std::prelude::*;
 use xcm::latest::prelude::*;
 
 pub use pallet::*;
-use oak_xcm::{XcmInstructionGenerator};
+use oak_xcm::{XcmInstructionGenerator, TURING_PARA_ID};
 
 #[cfg(test)]
 mod mock;
@@ -21,8 +21,6 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-
-mod xcm_test;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -48,11 +46,7 @@ use super::*;
 
 		type XcmSender: SendXcm;
 		type XcmExecutor: ExecuteXcm<<Self as pallet::Config>::Call>;
-		// type WeightInfo: pallet_automation_time::WeightInfo;
-		
-		type Weigher: WeightBounds<<Self as pallet::Config>::Call>;
-		
-		type AccountIdToMultiLocation: Convert<Self::AccountId, MultiLocation>;
+
 		type AccountIdToU8Vec: Convert<Self::AccountId, [u8; 32]>;
 		type OakXcmInstructionGenerator: XcmInstructionGenerator<Self>;
 		type Currency: Currency<Self::AccountId>;
@@ -82,31 +76,6 @@ use super::*;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn send_remark_with_event(origin: OriginFor<T>, para: ParaId, message: Vec<u8>) -> DispatchResult {
-			ensure_root(origin)?;
-
-			let call_name = b"remark_with_event".to_vec();
-			let remark = xcm_test::OakChainCallBuilder::remark_with_event::<T, BalanceOf<T>>(message);
-
-			match T::XcmSender::send_xcm(
-				(1, Junction::Parachain(para.into())),
-				Xcm(vec![Transact {
-					origin_type: OriginKind::SovereignAccount,
-					require_weight_at_most: 10_000_000_000,
-					call: remark.encode().into(),
-				}]),
-			) {
-				Ok(()) => {
-					Self::deposit_event(Event::CallSent(call_name));
-				},
-				Err(e) => {
-					Self::deposit_event(Event::ErrorSendingCall(e, para, call_name));
-				}
-			};
-			Ok(())
-		}
-
 		/**
 		 * This function wraps the currency transfer private function that can move tokens from wallet to wallet. 
 		 * The intention is for this function to be called by the `Transact` XCM instruction when Turing calls back to this chain.
@@ -116,7 +85,7 @@ use super::*;
 		 * Using this parachain ID, the user can make sure that the para ID is whitelisted.
 		 */
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn force_send_balance(origin: OriginFor<T>, source: T::AccountId, dest: T::AccountId, value: BalanceOf<T>) -> DispatchResult {
+		pub fn delayed_transfer(origin: OriginFor<T>, source: T::AccountId, dest: T::AccountId, value: BalanceOf<T>) -> DispatchResult {
 			let origin_para_id: ParaId = ensure_sibling_para(<T as Config>::Origin::from(origin))?;
 			info!("Force sending balance, source: {:?}, dest: {:?}, value: {:?}, origin_para_id: {:?}", source, dest, value, origin_para_id);
 			<T as Config>::Currency::transfer(
@@ -129,45 +98,46 @@ use super::*;
 		}
 
 		/**
-		 * This function implements XCM call to OAK with the OAK XCM crate. It uses the `force_send_balance` extrinsic above.
+		 * This function implements XCM call to OAK with the OAK XCM crate. It uses the `delayed_transfer` extrinsic above.
 		 * We can create an XCMP instruction with that call wrapped in the instructions to be sent back to this chain.
 		 * This implementation withdraws assets for the fee from the sovereign account of this chain on Turing.
 		 * Therefore, TUR tokens must be available for this sovereign account on the Turing chain. 
+		 *
+		 * NOTE: 7_000_000_000 as the fungible asset amount being withdrawn is just a temporary measure until fees are put into the crate.
 		 */
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn send_schedule_xcmp_with_crate(
 			origin: OriginFor<T>,
-			para: ParaId,
-			para_response_location: ParaId,
 			provided_id: Vec<u8>,
 			execution_times: Vec<u64>,
-			source: T::AccountId,
 			dest: T::AccountId,
 			value: BalanceOf<T>,
 		) -> DispatchResult {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			let tur_para_id: ParaId = ParaId::from(TURING_PARA_ID);
+			let self_para_id: ParaId = ParaId::from(2001);
 			let call_name = b"automation_time_schedule_xcmp_with_crate".to_vec();
-			let inner_call = <T as Config>::Call::from(Call::<T>::force_send_balance { source: source.clone(), dest, value })
+			let inner_call = <T as Config>::Call::from(Call::<T>::delayed_transfer { source: who.clone(), dest, value })
 				.encode()
 				.into();
 			let transact_instruction =
-				T::OakXcmInstructionGenerator::create_schedule_xcmp_instruction(provided_id, execution_times, para_response_location, inner_call);
+				T::OakXcmInstructionGenerator::create_schedule_xcmp_instruction(provided_id, execution_times, self_para_id, inner_call);
 			let asset = MultiAsset {
 				id: Concrete(MultiLocation::here()),
 				fun: Fungibility::Fungible(7_000_000_000),
 			};
 
-			let xcm_instruction_set = T::OakXcmInstructionGenerator::create_xcm_instruction_set(asset, transact_instruction, source);
+			let xcm_instruction_set = T::OakXcmInstructionGenerator::create_xcm_instruction_set(asset, transact_instruction, who);
 
 			match T::XcmSender::send_xcm(
-				(1, Junction::Parachain(para.into())),
+				(1, Junction::Parachain(tur_para_id.into())),
 				xcm_instruction_set,
 			) {
 				Ok(()) => {
 					Self::deposit_event(Event::CallSent(call_name));
 				},
 				Err(e) => {
-					Self::deposit_event(Event::ErrorSendingCall(e, para, call_name));
+					Self::deposit_event(Event::ErrorSendingCall(e, tur_para_id, call_name));
 				}
 			};
 			Ok(())

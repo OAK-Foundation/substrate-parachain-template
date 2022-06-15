@@ -453,13 +453,6 @@ impl pallet_collator_selection::Config for Runtime {
 	type WeightInfo = ();
 }
 
-pub struct AccountIdToMultiLocation;
-impl Convert<AccountId, MultiLocation> for AccountIdToMultiLocation {
-		fn convert(account: AccountId) -> MultiLocation {
-				X1(AccountId32 { network: NetworkId::Any, id: account.into() }).into()
-		}
-}
-
 pub struct AccountIdToU8Vec;
 impl Convert<AccountId, [u8; 32]> for AccountIdToU8Vec {
 		fn convert(_account: AccountId) -> [u8; 32] {
@@ -479,9 +472,6 @@ impl pallet_template::Config for Runtime {
 	type Call = Call;
 	type XcmSender = XcmRouter;
 	type XcmExecutor = XcmExecutor<XcmConfig>;
-	// type WeightInfo = pallet_automation_time::weights::AutomationWeight<Runtime>;
-	type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
-	type AccountIdToMultiLocation = AccountIdToMultiLocation;
 	type AccountIdToU8Vec = AccountIdToU8Vec;
 	type OakXcmInstructionGenerator =
 		oak_xcm::OakXcmInstructionGenerator<AccountIdToU8Vec, FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>>;
