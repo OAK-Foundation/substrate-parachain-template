@@ -47,9 +47,20 @@ default = ["std"]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 std = [
 	"codec/std",
-	"scale-info/std",
+	"cumulus-pallet-xcm/std",
+	"cumulus-primitives-core/std",
 	"frame-benchmarking/std",
 	"frame-support/std",
-	"frame-system/std"
+	"frame-system/std",
+	"log/std",
+	"oak-xcm/std",
+	"scale-info/std",
+	"serde/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"xcm/std",
+	"xcm-executor/std"
 ]
 try-runtime = [ "frame-support/try-runtime" ]

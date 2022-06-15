@@ -24,7 +24,6 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use xcm_executor::traits::WeightBounds;
 
 use super::*;
 	use frame_support::{pallet_prelude::*, traits::{ExistenceRequirement, Currency}};
