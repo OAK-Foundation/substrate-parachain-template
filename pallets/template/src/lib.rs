@@ -7,11 +7,13 @@
 use cumulus_pallet_xcm::{ensure_sibling_para, Origin as CumulusOrigin};
 use cumulus_primitives_core::ParaId;
 use frame_system::Config as SystemConfig;
+use polkadot_parachain::primitives::Sibling;
+use sp_runtime::traits::{AccountIdConversion, Convert};
 use sp_std::prelude::*;
 use xcm::latest::prelude::*;
 
 pub use pallet::*;
-use oak_xcm::{XcmInstructionGenerator, TURING_PARA_ID};
+use oak_xcm::XcmInstructionGenerator;
 
 #[cfg(test)]
 mod mock;
@@ -48,6 +50,8 @@ use super::*;
 		type OakXcmInstructionGenerator: XcmInstructionGenerator<Self>;
 		type Currency: Currency<Self::AccountId>;
 		type SelfParaId: Get<ParaId>;
+		type OakAutomationParaId: Get<ParaId>;
+		type AccountIdToMultiLocation: Convert<Self::AccountId, MultiLocation>;
 	}
 
 	#[pallet::pallet]
@@ -70,6 +74,8 @@ use super::*;
 		// TODO: expand into XcmExecutionFailed(XcmError) after https://github.com/paritytech/substrate/pull/10242 done
 		/// XCM execution failed.
 		XcmExecutionFailed,
+		// Invalid Refund Address
+		InvalidRefundAddress,
 	}
 
 	#[pallet::call]
@@ -112,7 +118,7 @@ use super::*;
 			value: BalanceOf<T>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let tur_para_id: ParaId = ParaId::from(TURING_PARA_ID);
+			let tur_para_id: ParaId = ParaId::from(T::OakAutomationParaId::get());
 			let self_para_id: ParaId = T::SelfParaId::get();
 			let call_name = b"automation_time_schedule_xcmp_with_crate".to_vec();
 			let inner_call = <T as Config>::Call::from(Call::<T>::delayed_transfer { source: who.clone(), dest, value })
@@ -125,7 +131,15 @@ use super::*;
 				fun: Fungibility::Fungible(7_000_000_000),
 			};
 
-			let xcm_instruction_set = T::OakXcmInstructionGenerator::create_xcm_instruction_set(asset, transact_instruction, who);
+			let refund_account = match AccountIdConversion::<T::AccountId>::try_into_account(&Sibling::from(self_para_id)) {
+				Some(para_id) => {
+					para_id
+				},
+				None => {
+					Err(Error::<T>::InvalidRefundAddress)?
+				}
+			};
+			let xcm_instruction_set = T::OakXcmInstructionGenerator::create_xcm_instruction_set(asset, transact_instruction, refund_account);
 
 			match T::XcmSender::send_xcm(
 				(1, Junction::Parachain(tur_para_id.into())),
@@ -138,6 +152,80 @@ use super::*;
 					Self::deposit_event(Event::ErrorSendingCall(e, tur_para_id, call_name));
 				}
 			};
+			Ok(())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn send_schedule_notify_in_unit(
+			origin: OriginFor<T>,
+			provided_id: Vec<u8>,
+			execution_times: Vec<u64>,
+			dest: T::AccountId,
+			value: BalanceOf<T>,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let tur_para_id: ParaId = ParaId::from(T::OakAutomationParaId::get());
+			let self_para_id: ParaId = T::SelfParaId::get();
+
+			let buy_execution_instruction = BuyExecution::<()> {
+				fees: MultiAsset {
+					id: Concrete(MultiLocation {
+						parents: 1,
+						interior: X1(Parachain(self_para_id.into())),
+					}),
+					fun: Fungibility::Fungible(10_000_000_000),
+				},
+				weight_limit: Unlimited,
+			};
+			let multiassets: MultiAssets = vec![MultiAsset {
+				id: Concrete(MultiLocation::here()),
+				fun: Fungibility::Fungible(10_000_000_000),
+			}].into();
+			let deposit_asset_instruction = DepositAsset::<()> {
+				assets: MultiAssetFilter::Definite(multiassets),
+				max_assets: 1,
+				beneficiary: MultiLocation {
+					parents: 1,
+					interior: X1(Parachain(tur_para_id.into())),
+				},
+			};
+			let recipient_xcm_instruction_set = Xcm(vec![
+				buy_execution_instruction,
+				deposit_asset_instruction,
+			]);
+
+			let withdraw_asset_instruction = WithdrawAsset::<()>(vec![MultiAsset {
+				id: Concrete(MultiLocation::here()),
+				fun: Fungibility::Fungible(10_000_000_000),
+			}].into());
+			let internal_instruction_set = Xcm(vec![
+				withdraw_asset_instruction,
+				DepositReserveAsset {
+					assets: MultiAssetFilter::Definite(vec![MultiAsset {
+				id: Concrete(MultiLocation::here()),
+				fun: Fungibility::Fungible(10_000_000_000),
+			}].into()),
+					max_assets: 1,
+					dest: MultiLocation {
+						parents: 1,
+						interior: X1(Parachain(tur_para_id.into())),
+					},
+					xcm: recipient_xcm_instruction_set,
+				}
+			]);
+
+			let xcm_origin = T::AccountIdToMultiLocation::convert(who);
+
+			T::XcmExecutor::execute_xcm_in_credit(
+				xcm_origin,
+				internal_instruction_set.into(),
+				11_000_000_000,
+				11_000_000_000
+			).ensure_complete()
+			.map_err(|error| {
+				log::error!("Failed execute transfer message with {:?}", error);
+				Error::<T>::XcmExecutionFailed
+			})?;
 			Ok(())
 		}
 	}
