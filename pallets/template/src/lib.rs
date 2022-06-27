@@ -166,16 +166,6 @@ use super::*;
 			let who = ensure_signed(origin)?;
 			let tur_para_id: ParaId = ParaId::from(T::OakAutomationParaId::get());
 			let self_para_id: ParaId = T::SelfParaId::get();
-			let call_name = b"automation_time_schedule_xcmp_in_unit".to_vec();
-
-			let inner_call = <T as Config>::Call::from(Call::<T>::delayed_transfer { source: who.clone(), dest, value })
-				.encode()
-				.into();
-
-			let transact_instruction =
-				T::OakXcmInstructionGenerator::create_schedule_xcmp_instruction(provided_id, execution_times, self_para_id, inner_call);
-
-			let refund_surplus_instruction = RefundSurplus::<()>;
 
 			let buy_execution_instruction = BuyExecution::<()> {
 				fees: MultiAsset {
@@ -188,32 +178,19 @@ use super::*;
 				weight_limit: Unlimited,
 			};
 			let multiassets: MultiAssets = vec![MultiAsset {
-				id: Concrete(MultiLocation {
-					parents: 1,
-					interior: X1(Parachain(self_para_id.into())),
-				}),
+				id: Concrete(MultiLocation::here()),
 				fun: Fungibility::Fungible(10_000_000_000),
 			}].into();
 			let deposit_asset_instruction = DepositAsset::<()> {
-				assets: MultiAssetFilter::Definite(multiassets.clone()),
+				assets: MultiAssetFilter::Definite(multiassets),
 				max_assets: 1,
 				beneficiary: MultiLocation {
 					parents: 1,
 					interior: X1(Parachain(tur_para_id.into())),
 				},
 			};
-			// let interior: Junctions = T::AccountIdToMultiLocation::convert(who.clone())
-      //           .clone()
-      //           .try_into()
-      //           .map_err(|_| Error::<T>::XcmExecutionFailed)?;
-			// let descend_origin_instruction = DescendOrigin::<()>(interior);
-			let reserve_asset_instruction = ReserveAssetDeposited::<()>(multiassets);
 			let recipient_xcm_instruction_set = Xcm(vec![
-				reserve_asset_instruction,
 				buy_execution_instruction,
-				// descend_origin_instruction,
-				transact_instruction,
-				refund_surplus_instruction,
 				deposit_asset_instruction,
 			]);
 
@@ -223,23 +200,24 @@ use super::*;
 			}].into());
 			let internal_instruction_set = Xcm(vec![
 				withdraw_asset_instruction,
-				DepositAsset {
+				DepositReserveAsset {
 					assets: MultiAssetFilter::Definite(vec![MultiAsset {
-						id: Concrete(MultiLocation::here()),
-						fun: Fungibility::Fungible(10_000_000_000),
-					}].into()),
+				id: Concrete(MultiLocation::here()),
+				fun: Fungibility::Fungible(10_000_000_000),
+			}].into()),
 					max_assets: 1,
-					beneficiary: MultiLocation {
+					dest: MultiLocation {
 						parents: 1,
 						interior: X1(Parachain(tur_para_id.into())),
 					},
+					xcm: recipient_xcm_instruction_set,
 				}
 			]);
 
 			let xcm_origin = T::AccountIdToMultiLocation::convert(who);
 
 			T::XcmExecutor::execute_xcm_in_credit(
-				xcm_origin.clone(),
+				xcm_origin,
 				internal_instruction_set.into(),
 				11_000_000_000,
 				11_000_000_000
@@ -248,19 +226,6 @@ use super::*;
 				log::error!("Failed execute transfer message with {:?}", error);
 				Error::<T>::XcmExecutionFailed
 			})?;
-
-			match T::XcmSender::send_xcm(
-				(1, Junction::Parachain(tur_para_id.into())),
-				recipient_xcm_instruction_set,
-			) {
-				Ok(()) => {
-					Self::deposit_event(Event::CallSent(call_name));
-				},
-				Err(e) => {
-					Self::deposit_event(Event::ErrorSendingCall(e, tur_para_id, call_name));
-				}
-			};
-
 			Ok(())
 		}
 	}
