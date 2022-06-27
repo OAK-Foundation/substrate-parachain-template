@@ -202,16 +202,16 @@ use super::*;
 					interior: X1(Parachain(tur_para_id.into())),
 				},
 			};
-			// let interior: Junctions = T::AccountIdToMultiLocation::convert(who.clone())
-      //           .clone()
-      //           .try_into()
-      //           .map_err(|_| Error::<T>::XcmExecutionFailed)?;
-			// let descend_origin_instruction = DescendOrigin::<()>(interior);
+			let interior: Junctions = T::AccountIdToMultiLocation::convert(who.clone())
+                .clone()
+                .try_into()
+                .map_err(|_| Error::<T>::XcmExecutionFailed)?;
+			let descend_origin_instruction = DescendOrigin::<()>(interior);
 			let reserve_asset_instruction = ReserveAssetDeposited::<()>(multiassets);
 			let recipient_xcm_instruction_set = Xcm(vec![
 				reserve_asset_instruction,
 				buy_execution_instruction,
-				// descend_origin_instruction,
+				descend_origin_instruction,
 				transact_instruction,
 				refund_surplus_instruction,
 				deposit_asset_instruction,
