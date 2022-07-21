@@ -8,8 +8,9 @@ use jsonrpsee::RpcModule;
 
 use cumulus_client_cli::CollatorOptions;
 // Local Runtime Types
+use primitives::{AccountId, Balance, Hash, Index as Nonce};
 use parachain_template_runtime::{
-	opaque::Block, AccountId, Balance, Hash, Index as Nonce, RuntimeApi,
+	opaque::Block, RuntimeApi,
 };
 
 // Cumulus Imports

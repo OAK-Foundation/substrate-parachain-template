@@ -1,5 +1,6 @@
 use cumulus_primitives_core::ParaId;
-use parachain_template_runtime::{AccountId, AuraId, Signature, EXISTENTIAL_DEPOSIT};
+use primitives::{AccountId, AuraId, Signature};
+use parachain_template_runtime::{EXISTENTIAL_DEPOSIT};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
@@ -213,14 +214,16 @@ fn testnet_genesis(
 				})
 				.collect(),
 		},
+		parachain_system: Default::default(),
+		polkadot_xcm: parachain_template_runtime::PolkadotXcmConfig {
+			safe_xcm_version: Some(SAFE_XCM_VERSION),
+		},
+		// tokens: Default::default(),
 		sudo: parachain_template_runtime::SudoConfig { key: Some(root_key) },
 		// no need to pass anything to aura, in fact it will panic if we do. Session will take care
 		// of this.
 		aura: Default::default(),
 		aura_ext: Default::default(),
-		parachain_system: Default::default(),
-		polkadot_xcm: parachain_template_runtime::PolkadotXcmConfig {
-			safe_xcm_version: Some(SAFE_XCM_VERSION),
-		},
+    	tokens: Default::default(),
 	}
 }
