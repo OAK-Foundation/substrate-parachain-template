@@ -4,7 +4,7 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
 
-use cumulus_pallet_xcm::{ensure_sibling_para, Origin as CumulusOrigin};
+use cumulus_pallet_xcm::Origin as CumulusOrigin;
 use cumulus_primitives_core::ParaId;
 use frame_system::Config as SystemConfig;
 use polkadot_parachain::primitives::Sibling;
@@ -90,8 +90,8 @@ use super::*;
 		 */
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn delayed_transfer(origin: OriginFor<T>, source: T::AccountId, dest: T::AccountId, value: BalanceOf<T>) -> DispatchResult {
-			let origin_para_id: ParaId = ensure_sibling_para(<T as Config>::Origin::from(origin))?;
-			info!("Send balance on a delayed transfer, source: {:?}, dest: {:?}, value: {:?}, origin_para_id: {:?}", source, dest, value, origin_para_id);
+			let who = ensure_signed(origin)?;
+			info!("Send balance on a delayed transfer, source: {:?}, dest: {:?}, value: {:?}, who: {:?}", source, dest, value, who);
 			<T as Config>::Currency::transfer(
 				&source,
 				&dest,

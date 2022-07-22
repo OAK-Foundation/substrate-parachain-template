@@ -7,7 +7,7 @@ use super::{
 use core::marker::PhantomData;
 use frame_support::{
 	match_types, parameter_types,
-	traits::{Everything, Nothing},
+	traits::{Everything, Nothing, OriginTrait},
 	weights::Weight,
 };
 use frame_system::EnsureRoot;
@@ -26,16 +26,19 @@ use xcm_builder::{
 	SiblingParachainAsNative, SiblingParachainConvertsVia, SignedAccountId32AsNative,
 	SignedToAccountId32, SovereignSignedViaLocation, TakeRevenue, TakeWeightCredit,
 };
-use xcm_executor::{traits::ShouldExecute, Config, XcmExecutor};
+use xcm_executor::{
+	traits::{ShouldExecute, ConvertOrigin}, 
+	Config, XcmExecutor,
+};
 
 // ORML imports
-use orml_traits::{location::AbsoluteReserveProvider, parameter_type_with_key, MultiCurrency};
+use orml_traits::{location::AbsoluteReserveProvider, parameter_type_with_key};
 use orml_xcm_support::{
 	DepositToAlternative, IsNativeConcrete, MultiCurrencyAdapter, MultiNativeAsset,
 };
 
 // Common imports
-use primitives::tokens::{convert_to_token, TokenInfo};
+use primitives::tokens::TokenInfo;
 
 parameter_types! {
 	pub const RelayLocation: MultiLocation = MultiLocation::parent();
@@ -86,6 +89,9 @@ pub type XcmOriginToTransactDispatchOrigin = (
 	SignedAccountId32AsNative<RelayNetwork, Origin>,
 	// Xcm origins can be represented natively under the Xcm pallet's Xcm origin.
 	XcmPassthrough<Origin>,
+	// Sovereign account converter; this attempts to derive an `AccountId32` from the origin
+	// X2 multilocation from a sibling Parachains and then turn that into the usual `Signed` origin.
+	SignedAccountId32AsX2Native<cumulus_pallet_xcm::Origin, Origin>,
 );
 
 parameter_types! {
@@ -183,12 +189,12 @@ pub fn ksm_per_second() -> u128 {
 	CurrencyId::KSM.cent() * 16
 }
 
-/// Assuming ~ $0.50 TUR price.
-pub fn tur_per_second() -> u128 {
-	let tur_equivalent = convert_to_token(CurrencyId::KSM, CurrencyId::Native, ksm_per_second());
-	// Assuming KSM ~ $130.00.
-	tur_equivalent * 260
-}
+// /// Assuming ~ $0.50 TUR price.
+// pub fn tur_per_second() -> u128 {
+// 	let tur_equivalent = convert_to_token(CurrencyId::KSM, CurrencyId::Native, ksm_per_second());
+// 	// Assuming KSM ~ $130.00.
+// 	tur_equivalent * 260
+// }
 
 parameter_types! {
 	pub UnitPerSecond: (AssetId, u128) = (
@@ -196,7 +202,7 @@ parameter_types! {
 			1,
 			X1(Parachain(u32::from(ParachainInfo::parachain_id()))),
 		).into(),
-		tur_per_second()
+		ksm_per_second() * 2
 	);
 
 	pub UnitPerSecondCanonical: (AssetId, u128) = (
@@ -204,7 +210,7 @@ parameter_types! {
 			0,
 			Here,
 		).into(),
-		tur_per_second()
+		ksm_per_second() * 2
 	);
 
 	pub TurPerSecond: (AssetId, u128) = (
@@ -402,5 +408,35 @@ pub struct AccountIdToMultiLocation;
 impl Convert<AccountId, MultiLocation> for AccountIdToMultiLocation {
 	fn convert(account: AccountId) -> MultiLocation {
 		X1(AccountId32 { network: NetworkId::Any, id: account.into() }).into()
+	}
+}
+
+pub struct SignedAccountId32AsX2Native<ParachainOrigin, Origin>(
+	PhantomData<(ParachainOrigin, Origin)>,
+);
+impl<ParachainOrigin: From<u32>, Origin: OriginTrait + From<ParachainOrigin>> ConvertOrigin<Origin>
+	for SignedAccountId32AsX2Native<ParachainOrigin, Origin>
+where
+	Origin::AccountId: From<[u8; 32]>,
+{
+	fn convert_origin(
+		origin: impl Into<MultiLocation>,
+		kind: OriginKind,
+	) -> Result<Origin, MultiLocation> {
+		let origin = origin.into();
+		log::trace!(
+			target: "xcm::origin_conversion",
+			"SignedAccountId32AsX2Native origin: {:?}, kind: {:?}",
+			origin, kind,
+		);
+		match (kind, origin) {
+			(
+				OriginKind::Native,
+				MultiLocation { parents: 1, interior: X2(Junction::Parachain(_), Junction::AccountId32 { id, network: _ }) },
+			) => {
+				Ok(Origin::signed(id.into()))
+			},
+			(_, origin) => Err(origin),
+		}
 	}
 }
