@@ -20,7 +20,7 @@ use polkadot_parachain::primitives::Sibling;
 // XCM Imports
 use xcm::{latest::prelude::*, v1::Junction::Parachain};
 use xcm_builder::{
-	AccountId32Aliases, AllowKnownQueryResponses, AllowSubscriptionsFrom,
+	Account32Hash, AccountId32Aliases, AllowKnownQueryResponses, AllowSubscriptionsFrom,
 	AllowTopLevelPaidExecutionFrom, AllowUnpaidExecutionFrom, EnsureXcmOrigin, FixedRateOfFungible,
 	FixedWeightBounds, LocationInverter, ParentIsPreset, RelayChainAsNative,
 	SiblingParachainAsNative, SiblingParachainConvertsVia, SignedAccountId32AsNative,
@@ -57,6 +57,8 @@ pub type LocationToAccountId = (
 	SiblingParachainConvertsVia<Sibling, AccountId>,
 	// Straight up local `AccountId32` origins just alias directly to `AccountId`.
 	AccountId32Aliases<RelayNetwork, AccountId>,
+	// Create hash of `AccountId32` used for proxy accounts
+	Account32Hash<RelayNetwork, AccountId>,
 );
 
 pub type LocalAssetTransactor = MultiCurrencyAdapter<
@@ -89,9 +91,11 @@ pub type XcmOriginToTransactDispatchOrigin = (
 	SignedAccountId32AsNative<RelayNetwork, Origin>,
 	// Xcm origins can be represented natively under the Xcm pallet's Xcm origin.
 	XcmPassthrough<Origin>,
+
+	// Converter created to convert X2 native origin to AccountId32 signed Origin.  Not needed if using `Account32Hash`.
 	// Sovereign account converter; this attempts to derive an `AccountId32` from the origin
 	// X2 multilocation from a sibling Parachains and then turn that into the usual `Signed` origin.
-	SignedAccountId32AsX2Native<cumulus_pallet_xcm::Origin, Origin>,
+	// SignedAccountId32AsX2Native<cumulus_pallet_xcm::Origin, Origin>,
 );
 
 parameter_types! {
