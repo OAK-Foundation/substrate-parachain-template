@@ -9,13 +9,14 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 mod weights;
 pub mod xcm_config;
 
+use codec::{Decode, Encode, MaxEncodedLen};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, Convert},
 	transaction_validity::{TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult,
+	ApplyExtrinsicResult, RuntimeDebug,
 };
 
 use sp_std::prelude::*;
@@ -25,7 +26,7 @@ use sp_version::RuntimeVersion;
 
 use frame_support::{
 	construct_runtime, parameter_types,
-	traits::{ConstU32, ConstU8, EnsureOneOf, Everything},
+	traits::{ConstU32, ConstU8, EnsureOneOf, Everything, InstanceFilter},
 	weights::{constants::WEIGHT_PER_SECOND, ConstantMultiplier, DispatchClass, Weight},
 	PalletId,
 };
@@ -405,6 +406,64 @@ impl pallet_template::Config for Runtime {
 	type OakAutomationParaId = OakAutomationParaId;
 }
 
+// Proxy Pallet
+parameter_types! {
+	pub const ProxyDepositBase: Balance = 0;
+	pub const ProxyDepositFactor: Balance = 0;
+	pub const AnnouncementDepositBase: Balance = 0;
+	pub const AnnouncementDepositFactor: Balance = 0;
+}
+
+#[derive(
+	Copy,
+	Clone,
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Encode,
+	Decode,
+	RuntimeDebug,
+	MaxEncodedLen,
+	scale_info::TypeInfo,
+)]
+pub enum ProxyType {
+	Any = 0,
+}
+
+impl Default for ProxyType {
+	fn default() -> Self {
+		Self::Any
+	}
+}
+
+impl InstanceFilter<Call> for ProxyType {
+	fn filter(&self, _c: &Call) -> bool {
+		match self {
+			ProxyType::Any => true,
+		}
+	}
+
+	fn is_superset(&self, _o: &Self) -> bool {
+		true
+	}
+}
+
+impl pallet_proxy::Config for Runtime {
+	type Event = Event;
+	type Call = Call;
+	type Currency = Balances;
+	type ProxyType = ProxyType;
+	type ProxyDepositBase = ProxyDepositBase;
+	type ProxyDepositFactor = ProxyDepositFactor;
+	type MaxProxies = ConstU32<32>;
+	type WeightInfo = pallet_proxy::weights::SubstrateWeight<Runtime>;
+	type MaxPending = ConstU32<32>;
+	type CallHasher = BlakeTwo256;
+	type AnnouncementDepositBase = AnnouncementDepositBase;
+	type AnnouncementDepositFactor = AnnouncementDepositFactor;
+}
+
 impl pallet_sudo::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
@@ -525,6 +584,8 @@ construct_runtime!(
 
 		// Template
 		TemplatePallet: pallet_template::{Pallet, Call, Storage, Event<T>}  = 50,
+
+		Proxy: pallet_proxy::{Pallet, Call, Storage, Event<T>} = 60,
 	}
 );
 
